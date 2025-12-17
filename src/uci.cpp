@@ -5,11 +5,14 @@
 
 static void dump_board() {
     for (int r = 7; r >= 0; --r) {
+        std::cout << (r + 1) << "  ";
         for (int f = 0; f < 8; ++f) {
-            std::cout << board[r * 8 + f] << ' ';
+            std::cout << piece_to_char(board[r * 8 + f]) << ' ';
         }
-        std::cout << "\n";
+        std::cout << '\n';
     }
+    std::cout << "\n   a b c d e f g h\n";
+    std::cout << "side: " << (side_to_move == WHITE ? "w" : "b") << '\n';
 }
 
 void uci_loop() {

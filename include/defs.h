@@ -20,4 +20,13 @@ void init();
 void set_startpos();
 void uci_loop();
 
+int sq(int file, int rank); // Convert file and rank into the correct int access for board
+
+// FEN
+bool set_fen(const char* fen);
+
+// Debug
+char piece_to_char(int p);
+int sq(int file, int rank); // file: 0..7 (a..h), rank: 0..7 (1..8)
+
 #endif //CHESSBOT_DEFS_H
