@@ -15,6 +15,34 @@ static void dump_board() {
     std::cout << "side: " << (side_to_move == WHITE ? "w" : "b") << '\n';
 }
 
+static void handle_position(const std::string& line) {
+    std::istringstream iss(line);
+    std::string word;
+
+    iss >> word; // Position
+    iss >> word; // This is "startpos" or "fen"
+
+    if (word == "startpos") {
+        set_startpos();
+    } else if (word == "fen") {
+        // Read fen fields until "moves" or end
+        std::string fen, tok;
+        while (iss >> tok) {
+            if (tok == "moves") break;
+            if (!fen.empty()) fen += ' ';
+            fen += tok;
+        }
+        if (!set_fen(fen.c_str())) {
+            std::cerr << "Invalid FEN\n";
+        }
+        // Iss is now positioned right after "moves".
+    } else {
+        // Bad formatting
+        return;
+    }
+    // TODO: Parse, apply moves onto board representation
+}
+
 void uci_loop() {
     std::string line;
     while (std::getline(std::cin, line)) {
@@ -31,6 +59,8 @@ void uci_loop() {
             set_startpos();
         } else if (cmd == "d") {
             dump_board();
+        } else if (cmd == "position") {
+            handle_position(line);
         } else if (cmd == "go") {
             std::cout << "bestmove e2e4\n";
         } else if (cmd == "quit") {
