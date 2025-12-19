@@ -46,10 +46,10 @@ static void handle_position(const std::string& line) {
     }
     if (hasMoves) {
         while (iss >> tok) {
-            Move m; // Create Move struct and try to create a "valid" move
+            Move m; // Create Move struct and validate move
             // TODO: Validate piece moveset later
             if (!parse_uci_move(tok, m)) return;
-            if (!make_move_basic(m)) return;
+            if (!make_move(m)) return; // TODO: Should become the newer ver. later
         }
     }
 }
@@ -72,6 +72,8 @@ void uci_loop() {
             dump_board();
         } else if (cmd == "position") {
             handle_position(line);
+        } else if (cmd == "u") {
+            undo_move();
         } else if (cmd == "go") {
             std::cout << "bestmove e2e4\n";
         } else if (cmd == "quit") {

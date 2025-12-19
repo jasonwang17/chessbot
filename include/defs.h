@@ -1,6 +1,3 @@
-#ifndef CHESSBOT_DEFS_H
-#define CHESSBOT_DEFS_H
-
 #pragma once
 #include <string>
 #include <cstdint>
@@ -14,27 +11,39 @@ extern int side_to_move;
 struct Move {
     uint8_t from = 0;
     uint8_t to = 0;
-    uint8_t promo = 0; // 0 = none
+    uint8_t promo = 0; // 0 = none, otherwise piece enum (WQ/WR/WB/WN or BQ/...)
 };
 
+struct Undo {
+    uint8_t from = 0;
+    uint8_t to = 0;
+    int moved = EMPTY;
+    int captured = EMPTY;
+    uint8_t promo = 0; // same encoding as Move
+    int prev_side = WHITE;
+};
+
+// Lifecycle
 void init();
 void set_startpos();
-void uci_loop();
-
-int sq(int file, int rank); // Convert file and rank into the correct int access for board
-
-// FEN
 bool set_fen(const char* fen);
 
-bool make_move_basic(const Move& m);
+// UCI
+void uci_loop();
 
+// Board helpers
+int sq(int file, int rank); // File a-h, rank 1-8
+
+// Move parsing
 bool parse_uci_move(const std::string& s, Move& out);
-int parse_square(const char fileChar, const char rankChar); // returns 0..63 or -1
-int promo_char_to_piece(char c, int side); // returns piece enum or 0 if none/invalid
+int parse_square(char fileChar, char rankChar); // Returns 0..63 or -1
+int promo_char_to_piece(char c, int side); // Returns piece enum or 0 if none/invalid
 
+// Make/undo stack (search foundation)
+void clear_history();
+bool make_move_basic(const Move &m); // Will remove later
+bool make_move(const Move& m);
+bool undo_move();
 
 // Debug
 char piece_to_char(int p);
-int sq(int file, int rank); // file: 0..7 (a..h), rank: 0..7 (1..8)
-
-#endif //CHESSBOT_DEFS_H

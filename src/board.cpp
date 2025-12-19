@@ -1,10 +1,18 @@
 #include "defs.h"
 
+#include <vector>
 #include <string>
 #include <cstdint>
 
 int board[64] = {0};
 int side_to_move = WHITE;
+
+// From what I've seen a vector technically (?) be better than stack or deque here:
+static std::vector<Undo> history;
+
+void clear_history() {
+    history.clear();
+}
 
 // Convert Piece enum from defs to piece character for FEN notation
 char piece_to_char(int p) {
@@ -106,6 +114,57 @@ bool make_move_basic(const Move& m) {
     return true;
 }
 
+// Updated make_move that uses Undo struct and pushes back onto history stack
+bool make_move(const Move& m) {
+    int from = m.from;
+    int to   = m.to;
+    if (from < 0 || from >= 64 || to < 0 || to >= 64) return false; // Not a valid square
+
+    int piece = board[from];
+    if (piece == EMPTY) return false; // Nothing to move
+
+    Undo u;
+    u.from = (uint8_t)from; u.to = (uint8_t)to;
+    u.moved = piece;
+    u.captured = board[to];
+    u.promo = m.promo;
+    u.prev_side = side_to_move;
+
+    // Apply
+    board[from] = EMPTY;
+    if (m.promo != 0) {
+        board[to] = (int)m.promo; // Not sure if int cast needed here, take look later
+    } else {
+        board[to] = piece;
+    }
+
+    side_to_move = (side_to_move == WHITE ? BLACK : WHITE);
+
+    history.push_back(u);
+    return true;
+}
+
+// Undoes make_move from above by popping back of history vector:
+bool undo_move() {
+    if (history.empty()) return false; // Nothing to pop
+
+    Undo u = history.back();
+    history.pop_back();
+
+    // Restore side first (important for promotion undo)
+    side_to_move = u.prev_side;
+    // Restore destination
+    board[u.to] = u.captured;
+
+    // Restore source
+    if (u.promo != 0) {
+        // If a promotion happened, the piece that moved was a pawn of inactive player:
+        board[u.from] = (side_to_move == WHITE) ? WP : BP;
+    } else {
+        board[u.from] = u.moved; // Restore position
+    }
+    return true;
+}
 
 void init() {}
 
@@ -114,8 +173,9 @@ bool set_fen(const char* fen) {
     // For now: parse piece placement + side to move only.
     // Format: "<pieces> <side> ..." (we ignore castling/ep/halfmove/fullmove for now)
 
-    // Clear the board
+    // Clear the board and history
     for (int i = 0; i < 64; ++i) board[i] = EMPTY;
+    clear_history();
 
     int file = 0;
     int rank = 7; // FEN starts at rank 8, for this code it is 0-7 inclusive
@@ -167,8 +227,6 @@ bool set_fen(const char* fen) {
 
 void set_startpos() {
     // Standard start position FEN
-    const char* start =
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-
+    const char* start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     (void)set_fen(start);
 }
