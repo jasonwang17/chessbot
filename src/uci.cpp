@@ -18,30 +18,40 @@ static void dump_board() {
 static void handle_position(const std::string& line) {
     std::istringstream iss(line);
     std::string word;
-
-    iss >> word; // Position
-    iss >> word; // This is "startpos" or "fen"
-
+    std::string tok;
+    iss >> word; iss >> word; // Position, then "startpos" or "fen"
+    bool hasMoves = false; // Detect if we are given "moves" afterwards
     if (word == "startpos") {
         set_startpos();
+        while (iss >> tok) {
+            if (tok == "moves") { hasMoves = true; break; }
+        }
+        if (!hasMoves) return;
     } else if (word == "fen") {
         // Read fen fields until "moves" or end
-        std::string fen, tok;
+        std::string fen;
         while (iss >> tok) {
-            if (tok == "moves") break;
+            if (tok == "moves") { hasMoves = true; break; }
             if (!fen.empty()) fen += ' ';
-            fen += tok;
+            fen += tok; // Construct FEN
         }
         if (!set_fen(fen.c_str())) {
-            std::cerr << "Invalid FEN\n";
+            std::cerr << "Invalid FEN\n"; // Debug
+            return;
         }
         // Iss is now positioned right after "moves".
     } else {
         // Bad formatting
         return;
     }
-
-    // TODO: Implement move handling from the UCI parse and promo functions in board.cpp
+    if (hasMoves) {
+        while (iss >> tok) {
+            Move m; // Create Move struct and try to create a "valid" move
+            // TODO: Validate piece moveset later
+            if (!parse_uci_move(tok, m)) return;
+            if (!make_move_basic(m)) return;
+        }
+    }
 }
 
 void uci_loop() {

@@ -1,6 +1,7 @@
 #include "defs.h"
-#include <cctype>
-#include <cstdio>
+
+#include <string>
+#include <cstdint>
 
 int board[64] = {0};
 int side_to_move = WHITE;

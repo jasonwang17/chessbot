@@ -2,8 +2,8 @@
 #define CHESSBOT_DEFS_H
 
 #pragma once
-#include <cstdint>
 #include <string>
+#include <cstdint>
 
 enum Piece : int { EMPTY, WP, WN, WB, WR, WQ, WK, BP, BN, BB, BR, BQ, BK };
 enum Side  : int { WHITE = 0, BLACK = 1 };
