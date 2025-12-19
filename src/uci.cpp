@@ -40,7 +40,8 @@ static void handle_position(const std::string& line) {
         // Bad formatting
         return;
     }
-    // TODO: Parse, apply moves onto board representation
+
+    // TODO: Implement move handling from the UCI parse and promo functions in board.cpp
 }
 
 void uci_loop() {

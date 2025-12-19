@@ -3,6 +3,7 @@
 
 #pragma once
 #include <cstdint>
+#include <string>
 
 enum Piece : int { EMPTY, WP, WN, WB, WR, WQ, WK, BP, BN, BB, BR, BQ, BK };
 enum Side  : int { WHITE = 0, BLACK = 1 };
@@ -24,6 +25,13 @@ int sq(int file, int rank); // Convert file and rank into the correct int access
 
 // FEN
 bool set_fen(const char* fen);
+
+bool make_move_basic(const Move& m);
+
+bool parse_uci_move(const std::string& s, Move& out);
+int parse_square(const char fileChar, const char rankChar); // returns 0..63 or -1
+int promo_char_to_piece(char c, int side); // returns piece enum or 0 if none/invalid
+
 
 // Debug
 char piece_to_char(int p);
