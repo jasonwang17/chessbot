@@ -74,6 +74,10 @@ void uci_loop() {
             handle_position(line);
         } else if (cmd == "u") {
             undo_move();
+        } else if (cmd == "moves") {
+            MoveList list;
+            gen_moves(list);
+            std::cerr << "moves: " << list.count << "\n";
         } else if (cmd == "go") {
             std::cout << "bestmove e2e4\n";
         } else if (cmd == "quit") {

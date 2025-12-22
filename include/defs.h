@@ -39,6 +39,13 @@ bool parse_uci_move(const std::string& s, Move& out);
 int parse_square(char fileChar, char rankChar); // Returns 0..63 or -1
 int promo_char_to_piece(char c, int side); // Returns piece enum or 0 if none/invalid
 
+// Move list
+struct MoveList {
+    Move moves[256];
+    int count = 0;
+};
+void gen_moves(MoveList& list);
+
 // Make/undo stack (search foundation)
 void clear_history();
 bool make_move_basic(const Move &m); // Will remove later

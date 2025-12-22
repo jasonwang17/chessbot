@@ -39,6 +39,9 @@ static int char_to_piece(char c) {
 
 int sq(int file, int rank) { return rank * 8 + file; }
 
+static int file_of(int sq) { return sq & 7; }   // And by 7 (range is 0-7 inclusive) to find file
+static int rank_of(int sq) { return sq >> 3; }  // Rightshift 3 bits to find rank
+
 // Validate square passed by character value of file (a-h) and rank (1-8)
 int parse_square(const char fileChar, const char rankChar) {
     if (fileChar < 'a' || fileChar > 'h') return -1;
@@ -46,6 +49,77 @@ int parse_square(const char fileChar, const char rankChar) {
     int file = fileChar - 'a';
     int rank = rankChar - '1';
     return sq(file, rank);
+}
+
+// Movegen helpers
+static bool is_white(int p) {
+    return p >= WP && p <= WK;
+}
+
+static bool is_black(int p) {
+    return p >= BP && p <= BK;
+}
+
+static bool same_side(int p, int side) {
+    return (side == WHITE) ? is_white(p) : is_black(p);
+}
+
+static bool enemy_side(int p, int side) {
+    return (side == WHITE) ? is_black(p) : is_white(p);
+}
+
+// Movegen
+static const int knight_offsets[8] = {17, 15, 10, 6,
+                                     -6, -10, -15,-17};
+
+static void gen_knight_moves(int from, MoveList& list) {
+    int from_file = file_of(from);
+    int from_rank = rank_of(from);
+
+    for (int i = 0; i < 8; i++) {
+        int to = from + knight_offsets[i]; // Check for this value of to that:
+        if (to < 0 || to >= 64) continue; // It is within the valid squares
+
+        // Check that knight move behavior follows 1 by 2 movement
+        int to_file = file_of(to);
+        int to_rank = rank_of(to);
+        int df = to_file - from_file;
+        int dr = to_rank - from_rank;
+
+        if (!((abs(df) == 1 && abs(dr) == 2) ||
+              (abs(df) == 2 && abs(dr) == 1)))
+            continue;
+
+        int target = board[to];
+        // Friendly piece blocks
+        if (target != EMPTY && same_side(target, side_to_move))
+            continue;
+
+        // TODO: Pin, check, other checks before adding to moveset
+
+        // Add move (passed all previous checks)
+        Move m;
+        m.from = from;
+        m.to = to;
+        m.promo = 0;
+        list.moves[list.count++] = m;
+    }
+}
+
+void gen_moves(MoveList& list) {
+    list.count = 0;
+    for (int sq = 0; sq < 64; sq++) {
+        int p = board[sq];
+        if (p == EMPTY) continue;
+        if (!same_side(p, side_to_move)) continue;
+        switch (p) {
+            case WN:
+            case BN:
+                gen_knight_moves(sq, list);
+                break;
+                // other pieces later
+        }
+    }
 }
 
 // Return piece promoted
@@ -91,26 +165,6 @@ bool parse_uci_move(const std::string& s, Move& out) {
         // Store promotion piece enum
         out.promo = static_cast<uint8_t>(promoPiece);
     }
-    return true;
-}
-
-bool make_move_basic(const Move& m) {
-    int from = m.from;
-    int to = m.to;
-    if (from < 0 || from >= 64 || to < 0 || to >= 64) return false; // Not a valid square
-
-    int piece = board[from];
-    if (piece == EMPTY) return false; // Nothing to move
-
-    board[from] = EMPTY;
-
-    if (m.promo != 0) {
-        board[to] = m.promo; // Overwrite with promoted piece
-    } else {
-        board[to] = piece;
-    }
-
-    side_to_move = (side_to_move == WHITE ? BLACK : WHITE); // Flip side
     return true;
 }
 
