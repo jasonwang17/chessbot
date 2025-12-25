@@ -2,8 +2,11 @@
 
 #include <vector>
 #include <string>
+#include <cstdlib>
 #include <cstdint>
 
+// It should be noted to avoid any confusion that this is flipped from the display.
+// White appears on the bottom when asking for a board display (cmd d), but white is at the top of this array.
 int board[64] = {0};
 int side_to_move = WHITE;
 
@@ -72,6 +75,117 @@ static bool enemy_side(int p, int side) {
 static const int knight_offsets[8] = {17, 15, 10, 6,
                                      -6, -10, -15,-17};
 
+static void add_move(MoveList& list, int from, int to, int promo = 0) {
+    Move m;
+    m.from = (uint8_t)from;
+    m.to = (uint8_t)to;
+    m.promo = (uint8_t)promo;
+    list.moves[list.count++] = m;
+}
+
+static void gen_pawn_moves(int from, MoveList& list, int side) {
+    int f = file_of(from);
+    int r = rank_of(from);
+
+    // White pawns:
+    if (side == WHITE) {
+        int oneUp = from + 8; // Look one above
+        if (oneUp < 64 && board[oneUp] == EMPTY) {
+            // Pawn can promote if on rank 7 and rank 8 above it is empty
+            if (r == 6) {
+                add_move(list, from, oneUp, WQ);
+                add_move(list, from, oneUp, WR);
+                add_move(list, from, oneUp, WB);
+                add_move(list, from, oneUp, WN);
+            } else { // No promo, just one step ahead is ok
+                add_move(list, from, oneUp, 0);
+
+                // Double push from rank 2
+                if (r == 1) {
+                    int twoUp = from + 16; // Look two ahead
+                    if (twoUp < 64 && board[twoUp] == EMPTY) {
+                        add_move(list, from, twoUp, 0);
+                    }
+                }
+            }
+        }
+
+        // Captures
+        if (f > 0) { // If we can look to the left:
+            int cap = from + 7; // Look to the left and above
+            if (cap < 64 && enemy_side(board[cap], side)) {
+                if (r == 6) { // Add all promotion moves
+                    add_move(list, from, cap, WQ);
+                    add_move(list, from, cap, WR);
+                    add_move(list, from, cap, WB);
+                    add_move(list, from, cap, WN);
+                } else {
+                    add_move(list, from, cap, 0);
+                }
+            }
+        }
+        if (f < 7) { // If we can look to the right
+            int cap = from + 9; // Look above and to the right
+            if (cap < 64 && enemy_side(board[cap], side)) {
+                if (r == 6) { // Does this capture also promote the pawn?
+                    add_move(list, from, cap, WQ);
+                    add_move(list, from, cap, WR);
+                    add_move(list, from, cap, WB);
+                    add_move(list, from, cap, WN);
+                } else { // Just the capture move
+                    add_move(list, from, cap, 0);
+                }
+            }
+        }
+    } else { // Black pieces (same logic as white, minus instead of plus for indexing).
+        int one = from - 8; // Look one below
+        if (one >= 0 && board[one] == EMPTY) {
+            if (r == 1) {
+                add_move(list, from, one, BQ);
+                add_move(list, from, one, BR);
+                add_move(list, from, one, BB);
+                add_move(list, from, one, BN);
+            } else {
+                add_move(list, from, one, 0);
+                if (r == 6) {
+                    int two = from - 16;
+                    if (two >= 0 && board[two] == EMPTY) {
+                        add_move(list, from, two, 0);
+                    }
+                }
+            }
+        }
+
+        // Captures
+        if (f > 0) {
+            int cap = from - 9;
+            if (cap >= 0 && enemy_side(board[cap], side)) {
+                if (r == 1) {
+                    add_move(list, from, cap, BQ);
+                    add_move(list, from, cap, BR);
+                    add_move(list, from, cap, BB);
+                    add_move(list, from, cap, BN);
+                } else {
+                    add_move(list, from, cap, 0);
+                }
+            }
+        }
+        if (f < 7) {
+            int cap = from - 7;
+            if (cap >= 0 && enemy_side(board[cap], side)) {
+                if (r == 1) {
+                    add_move(list, from, cap, BQ);
+                    add_move(list, from, cap, BR);
+                    add_move(list, from, cap, BB);
+                    add_move(list, from, cap, BN);
+                } else {
+                    add_move(list, from, cap, 0);
+                }
+            }
+        }
+    }
+}
+
 static void gen_knight_moves(int from, MoveList& list) {
     int from_file = file_of(from);
     int from_rank = rank_of(from);
@@ -98,11 +212,7 @@ static void gen_knight_moves(int from, MoveList& list) {
         // TODO: Pin, check, other checks before adding to moveset
 
         // Add move (passed all previous checks)
-        Move m;
-        m.from = from;
-        m.to = to;
-        m.promo = 0;
-        list.moves[list.count++] = m;
+        add_move(list, from, to, 0);
     }
 }
 
@@ -111,14 +221,11 @@ void gen_moves(MoveList& list) {
     for (int sq = 0; sq < 64; sq++) {
         int p = board[sq];
         if (p == EMPTY) continue;
+        // Piece must be the same color as the side to move to generate the move:
         if (!same_side(p, side_to_move)) continue;
-        switch (p) {
-            case WN:
-            case BN:
-                gen_knight_moves(sq, list);
-                break;
-                // other pieces later
-        }
+        if (p == WN || p == BN) gen_knight_moves(sq, list); // Knight
+        else if (p == WP || p == BP) gen_pawn_moves(sq, list, side_to_move); // Pawn
+        // TODO: Bishop, Rook, Queen, King, add check and pin behavior, en passant
     }
 }
 
