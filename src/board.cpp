@@ -216,6 +216,52 @@ static void gen_knight_moves(int from, MoveList& list) {
     }
 }
 
+static void gen_slider_moves(int from, MoveList& list, int side,
+                             const int* df, const int* dr, int nDirs) {
+    int fromF = file_of(from);
+    int fromR = rank_of(from);
+
+    for (int d = 0; d < nDirs; d++) {
+        int f = fromF + df[d];
+        int r = fromR + dr[d];
+        while (f >= 0 && f < 8 && r >= 0 && r < 8) {
+            int to = sq(f, r);
+            int target = board[to];
+            if (target == EMPTY) {
+                add_move(list, from, to, 0);
+            } else {
+                // Occupied square: can capture if enemy, if not cannot, stop after
+                if (enemy_side(target, side)) {
+                    add_move(list, from, to, 0);
+                }
+                break;
+            }
+            // Update file and rank
+            f += df[d];
+            r += dr[d];
+        }
+    }
+}
+
+static void gen_bishop_moves(int from, MoveList& list, int side) {
+    // Any diagonal
+    static const int df[4] = { +1, -1, +1, -1 };
+    static const int dr[4] = { +1, +1, -1, -1 };
+    gen_slider_moves(from, list, side, df, dr, 4);
+}
+
+static void gen_rook_moves(int from, MoveList& list, int side) {
+    static const int df[4] = { 0,  0, +1, -1 };
+    static const int dr[4] = { +1, -1, 0,  0 };
+    gen_slider_moves(from, list, side, df, dr, 4);
+}
+
+static void gen_queen_moves(int from, MoveList& list, int side) {
+    static const int df[8] = { 0,  0, +1, -1, +1, -1, +1, -1 };
+    static const int dr[8] = { +1, -1, 0,  0, +1, +1, -1, -1 };
+    gen_slider_moves(from, list, side, df, dr, 8);
+}
+
 void gen_moves(MoveList& list) {
     list.count = 0;
     for (int sq = 0; sq < 64; sq++) {
@@ -225,7 +271,10 @@ void gen_moves(MoveList& list) {
         if (!same_side(p, side_to_move)) continue;
         if (p == WN || p == BN) gen_knight_moves(sq, list); // Knight
         else if (p == WP || p == BP) gen_pawn_moves(sq, list, side_to_move); // Pawn
-        // TODO: Bishop, Rook, Queen, King, add check and pin behavior, en passant
+        else if (p == WB || p == BB) gen_bishop_moves(sq, list, side_to_move); // Bishop
+        else if (p == WR || p == BR) gen_rook_moves(sq, list, side_to_move); // Rook
+        else if (p == WQ || p == BQ) gen_queen_moves(sq, list, side_to_move); // Queen
+        // TODO: King movement, castling, en passant, legality check
     }
 }
 

@@ -4,6 +4,7 @@
 #include <string>
 
 static void dump_board() {
+    // This prints backwards from the actual storage but is most intuitively displayed this way.
     for (int r = 7; r >= 0; --r) {
         std::cout << (r + 1) << "  ";
         for (int f = 0; f < 8; ++f) {
