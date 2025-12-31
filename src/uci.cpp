@@ -77,7 +77,7 @@ void uci_loop() {
             undo_move();
         } else if (cmd == "moves") {
             MoveList list;
-            gen_moves(list);
+            gen_legal_moves(list);
             std::cerr << "moves: " << list.count << "\n";
         } else if (cmd == "go") {
             std::cout << "bestmove e2e4\n";

@@ -202,6 +202,13 @@ static bool is_square_attacked(int targetSq, int bySide) {
     return false; // Not under attack
 }
 
+static bool is_in_check(int side) {
+    int kingSq = find_king_square(side);
+    if (kingSq < 0) return false; // or assert(false) if you prefer
+    int attackerSide = (side == WHITE) ? BLACK : WHITE;
+    return is_square_attacked(kingSq, attackerSide);
+}
+
 static void add_move(MoveList& list, int from, int to, int promo = 0) {
     Move m;
     m.from = (uint8_t)from;
@@ -404,6 +411,22 @@ void gen_moves(MoveList& list) {
         else if (p == WQ || p == BQ) gen_queen_moves(sq, list, side_to_move); // Queen
         else if (p == WK || p == BK) gen_king_moves(sq, list, side_to_move); // King
         // TODO: Castling, en passant, legality check
+    }
+}
+
+void gen_legal_moves(MoveList& legal) {
+    MoveList pseudo;
+    gen_moves(pseudo);
+    legal.count = 0;
+    int movingSide = side_to_move;
+
+    for (int i = 0; i < pseudo.count; i++) {
+        const Move& m = pseudo.moves[i];
+        if (!make_move(m)) continue;
+        bool illegal = is_in_check(movingSide);
+        undo_move();
+
+        if (!illegal) add_move(legal, m.from, m.to, m.promo);
     }
 }
 

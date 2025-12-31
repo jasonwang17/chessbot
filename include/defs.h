@@ -48,7 +48,15 @@ struct MoveList {
     Move moves[256];
     int count = 0;
 };
+
+// Add legal filter over move list
+struct LegalMoveList {
+    Move moves[256];
+    int count = 0;
+};
+
 void gen_moves(MoveList& list);
+void gen_legal_moves(MoveList& legal);
 
 // Make/undo stack (search foundation)
 void clear_history();
