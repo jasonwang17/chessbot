@@ -2,7 +2,11 @@
 #include <string>
 #include <cstdint>
 
-enum Piece : int { EMPTY, WP, WN, WB, WR, WQ, WK, BP, BN, BB, BR, BQ, BK };
+enum Piece {
+    EMPTY = 0,
+    WP, WN, WB, WR, WQ, WK,
+    BP, BN, BB, BR, BQ, BK
+};
 enum Side  : int { WHITE = 0, BLACK = 1 };
 
 extern int board[64];

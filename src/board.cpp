@@ -56,11 +56,10 @@ int parse_square(const char fileChar, const char rankChar) {
 
 // Movegen helpers
 static bool is_white(int p) {
-    return p >= WP && p <= WK;
+    return p == WP || p == WN || p == WB || p == WR || p == WQ || p == WK;
 }
-
 static bool is_black(int p) {
-    return p >= BP && p <= BK;
+    return p == BP || p == BN || p == BB || p == BR || p == BQ || p == BK;
 }
 
 static bool same_side(int p, int side) {
@@ -72,8 +71,136 @@ static bool enemy_side(int p, int side) {
 }
 
 // Movegen
-static const int knight_offsets[8] = {17, 15, 10, 6,
-                                     -6, -10, -15,-17};
+static const int KNIGHT_DF[8] = { +1, +2, +2, +1, -1, -2, -2, -1 };
+static const int KNIGHT_DR[8] = { +2, +1, -1, -2, -2, -1, +1, +2 };
+
+static const int KING_DF[8] = { -1,  0, +1, -1, +1, -1,  0, +1 };
+static const int KING_DR[8] = { -1, -1, -1,  0,  0, +1, +1, +1 };
+
+static const int BISHOP_DF[4] = { +1, -1, +1, -1 };
+static const int BISHOP_DR[4] = { +1, +1, -1, -1 };
+
+static const int ROOK_DF[4] = {  0,  0, +1, -1 };
+static const int ROOK_DR[4] = { +1, -1,  0,  0 };
+
+static const int QUEEN_DF[8] = {  0,  0, +1, -1, +1, -1, +1, -1 };
+static const int QUEEN_DR[8] = { +1, -1,  0,  0, +1, +1, -1, -1 };
+
+static int find_king_square(int side) {
+    int king = (side == WHITE) ? WK : BK;
+    for (int i = 0; i < 64; i++) {
+        if (board[i] == king) return i;
+    }
+    return -1; // Should never happen if a position is valid
+}
+
+// Return true if at any point an attack upon this square is found
+static bool is_square_attacked(int targetSq, int bySide) {
+    int fromF = file_of(targetSq);
+    int fromR = rank_of(targetSq);
+
+    // Pawn
+    if (bySide == WHITE) {
+        // White pawn attacks come from (file-1, rank-1) and (file+1, rank-1)
+        if (fromR > 0) {
+            if (fromF > 0) {
+                int to = sq(fromF - 1, fromR - 1);
+                if (board[to] == WP) return true;
+            }
+            if (fromF < 7) {
+                int to = sq(fromF + 1, fromR - 1);
+                if (board[to] == WP) return true;
+            }
+        }
+    } else {
+        // Black pawns (inverse logic)
+        if (fromR < 7) {
+            if (fromF > 0) {
+                int to = sq(fromF - 1, fromR + 1);
+                if (board[to] == BP) return true;
+            }
+            if (fromF < 7) {
+                int to = sq(fromF + 1, fromR + 1);
+                if (board[to] == BP) return true;
+            }
+        }
+    }
+
+    // Knight
+    {
+        int knight = (bySide == WHITE) ? WN : BN;
+        for (int i = 0; i < 8; i++) {
+            int f = fromF + KNIGHT_DF[i];
+            int r = fromR + KNIGHT_DR[i];
+            if (f < 0 || f >= 8 || r < 0 || r >= 8) continue;
+
+            int to = sq(f, r);
+            if (board[to] == knight) return true;
+        }
+    }
+
+    // King
+    {
+        int king = (bySide == WHITE) ? WK : BK;
+        for (int i = 0; i < 8; i++) {
+            int f = fromF + KING_DF[i];
+            int r = fromR + KING_DR[i];
+            if (f < 0 || f >= 8 || r < 0 || r >= 8) continue;
+
+            int to = sq(f, r);
+            if (board[to] == king) return true;
+        }
+    }
+
+    // Diagonals (Bishop, queen)
+    {
+        int bishop = (bySide == WHITE) ? WB : BB;
+        int queen  = (bySide == WHITE) ? WQ : BQ;
+
+        for (int d = 0; d < 4; d++) {
+            int f = fromF + BISHOP_DF[d];
+            int r = fromR + BISHOP_DR[d];
+
+            while (f >= 0 && f < 8 && r >= 0 && r < 8) {
+                int to = sq(f, r);
+                int target = board[to];
+
+                if (target != EMPTY) {
+                    if (target == bishop || target == queen) return true;
+                    break;
+                }
+
+                f += BISHOP_DF[d];
+                r += BISHOP_DR[d];
+            }
+        }
+    }
+
+    // Orthogonal (Rook, queen)
+    {
+        int rook  = (bySide == WHITE) ? WR : BR;
+        int queen = (bySide == WHITE) ? WQ : BQ;
+
+        for (int d = 0; d < 4; d++) {
+            int f = fromF + ROOK_DF[d];
+            int r = fromR + ROOK_DR[d];
+
+            while (f >= 0 && f < 8 && r >= 0 && r < 8) {
+                int to = sq(f, r);
+                int target = board[to];
+
+                if (target != EMPTY) {
+                    if (target == rook || target == queen) return true;
+                    break;
+                }
+
+                f += ROOK_DF[d];
+                r += ROOK_DR[d];
+            }
+        }
+    }
+    return false; // Not under attack
+}
 
 static void add_move(MoveList& list, int from, int to, int promo = 0) {
     Move m;
@@ -186,80 +313,81 @@ static void gen_pawn_moves(int from, MoveList& list, int side) {
     }
 }
 
-static void gen_knight_moves(int from, MoveList& list) {
-    int from_file = file_of(from);
-    int from_rank = rank_of(from);
-
-    for (int i = 0; i < 8; i++) {
-        int to = from + knight_offsets[i]; // Check for this value of to that:
-        if (to < 0 || to >= 64) continue; // It is within the valid squares
-
-        // Check that knight move behavior follows 1 by 2 movement
-        int to_file = file_of(to);
-        int to_rank = rank_of(to);
-        int df = to_file - from_file;
-        int dr = to_rank - from_rank;
-
-        if (!((abs(df) == 1 && abs(dr) == 2) ||
-              (abs(df) == 2 && abs(dr) == 1)))
-            continue;
-
-        int target = board[to];
-        // Friendly piece blocks
-        if (target != EMPTY && same_side(target, side_to_move))
-            continue;
-
-        // TODO: Pin, check, other checks before adding to moveset
-
-        // Add move (passed all previous checks)
-        add_move(list, from, to, 0);
-    }
-}
-
 static void gen_slider_moves(int from, MoveList& list, int side,
-                             const int* df, const int* dr, int nDirs) {
+                             const int* DF, const int* DR, int dirCount) {
     int fromF = file_of(from);
     int fromR = rank_of(from);
 
-    for (int d = 0; d < nDirs; d++) {
-        int f = fromF + df[d];
-        int r = fromR + dr[d];
+    for (int d = 0; d < dirCount; d++) {
+        int f = fromF + DF[d];
+        int r = fromR + DR[d];
+
         while (f >= 0 && f < 8 && r >= 0 && r < 8) {
             int to = sq(f, r);
             int target = board[to];
+
             if (target == EMPTY) {
                 add_move(list, from, to, 0);
             } else {
-                // Occupied square: can capture if enemy, if not cannot, stop after
                 if (enemy_side(target, side)) {
                     add_move(list, from, to, 0);
                 }
                 break;
             }
-            // Update file and rank
-            f += df[d];
-            r += dr[d];
+
+            f += DF[d];
+            r += DR[d];
         }
     }
 }
 
+// Updated: Moves away from square delta check to mitigate reconverting file and rank:
+static void gen_knight_moves(int from, MoveList& list) {
+    int fromF = file_of(from);
+    int fromR = rank_of(from);
+
+    for (int i = 0; i < 8; i++) {
+        int f = fromF + KNIGHT_DF[i];
+        int r = fromR + KNIGHT_DR[i];
+        if (f < 0 || f >= 8 || r < 0 || r >= 8) continue;
+
+        int to = sq(f, r);
+        int target = board[to];
+        if (target != EMPTY && same_side(target, side_to_move)) continue;
+        // Passed all checks
+        add_move(list, from, to, 0);
+    }
+}
+
+// Updated: Defined global DF and DR for sliding pieces, king and knight to pass:
 static void gen_bishop_moves(int from, MoveList& list, int side) {
-    // Any diagonal
-    static const int df[4] = { +1, -1, +1, -1 };
-    static const int dr[4] = { +1, +1, -1, -1 };
-    gen_slider_moves(from, list, side, df, dr, 4);
+    gen_slider_moves(from, list, side, BISHOP_DF, BISHOP_DR, 4);
 }
 
 static void gen_rook_moves(int from, MoveList& list, int side) {
-    static const int df[4] = { 0,  0, +1, -1 };
-    static const int dr[4] = { +1, -1, 0,  0 };
-    gen_slider_moves(from, list, side, df, dr, 4);
+    gen_slider_moves(from, list, side, ROOK_DF, ROOK_DR, 4);
 }
 
 static void gen_queen_moves(int from, MoveList& list, int side) {
-    static const int df[8] = { 0,  0, +1, -1, +1, -1, +1, -1 };
-    static const int dr[8] = { +1, -1, 0,  0, +1, +1, -1, -1 };
-    gen_slider_moves(from, list, side, df, dr, 8);
+    gen_slider_moves(from, list, side, QUEEN_DF, QUEEN_DR, 8);
+}
+
+static void gen_king_moves(int from, MoveList& list, int side) {
+    int fromF = file_of(from);
+    int fromR = rank_of(from);
+
+    // All 8 cardinal directions
+    for (int i = 0; i < 8; i++) {
+        int f = fromF + KING_DF[i];
+        int r = fromR + KING_DR[i];
+        if (f < 0 || f >= 8 || r < 0 || r >= 8) continue;
+
+        int to = sq(f, r);
+        int target = board[to];
+        if (target != EMPTY && same_side(target, side)) continue;
+
+        add_move(list, from, to, 0);
+    }
 }
 
 void gen_moves(MoveList& list) {
@@ -274,7 +402,8 @@ void gen_moves(MoveList& list) {
         else if (p == WB || p == BB) gen_bishop_moves(sq, list, side_to_move); // Bishop
         else if (p == WR || p == BR) gen_rook_moves(sq, list, side_to_move); // Rook
         else if (p == WQ || p == BQ) gen_queen_moves(sq, list, side_to_move); // Queen
-        // TODO: King movement, castling, en passant, legality check
+        else if (p == WK || p == BK) gen_king_moves(sq, list, side_to_move); // King
+        // TODO: Castling, en passant, legality check
     }
 }
 
