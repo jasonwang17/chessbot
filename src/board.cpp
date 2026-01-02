@@ -10,6 +10,9 @@
 int board[64] = {0};
 int side_to_move = WHITE;
 
+// Bitmask: KQkq (white kingside, queenside, then black kingside, queenside)
+static int castling_rights = 0;
+
 // From what I've seen a vector technically (?) be better than stack or deque here:
 static std::vector<Undo> history;
 
@@ -383,7 +386,7 @@ static void gen_king_moves(int from, MoveList& list, int side) {
     int fromF = file_of(from);
     int fromR = rank_of(from);
 
-    // All 8 cardinal directions
+    // Normal king moves
     for (int i = 0; i < 8; i++) {
         int f = fromF + KING_DF[i];
         int r = fromR + KING_DR[i];
@@ -394,6 +397,61 @@ static void gen_king_moves(int from, MoveList& list, int side) {
         if (target != EMPTY && same_side(target, side)) continue;
 
         add_move(list, from, to, 0);
+    }
+
+    // Castling: must not be in check, must not pass through attacked squares,
+    // must have rook present, and squares between must be empty.
+    const int enemy = (side == WHITE) ? BLACK : WHITE;
+
+    if (side == WHITE && from == sq(4, 0)) { // e1
+        // You cannot castle out of check
+        if (!is_in_check(WHITE)) {
+            // Kingside: e1 -> g1, rook h1 -> f1
+            if (castling_rights & 1) {
+                if (board[sq(7,0)] == WR && // rook present
+                    board[sq(5,0)] == EMPTY && // f1 empty
+                    board[sq(6,0)] == EMPTY && // g1 empty
+                    !is_square_attacked(sq(5,0), enemy) && // f1 not attacked
+                    !is_square_attacked(sq(6,0), enemy)) { // g1 not attacked
+                    add_move(list, from, sq(6,0), 0); // e1g1
+                }
+            }
+            // Queenside: e1 -> c1, rook a1 -> d1
+            if (castling_rights & 2) {
+                if (board[sq(0,0)] == WR && // rook present
+                    board[sq(3,0)] == EMPTY && // d1 empty
+                    board[sq(2,0)] == EMPTY && // c1 empty
+                    board[sq(1,0)] == EMPTY && // b1 empty
+                    !is_square_attacked(sq(3,0), enemy) && // d1 not attacked
+                    !is_square_attacked(sq(2,0), enemy)) { // c1 not attacked
+                    add_move(list, from, sq(2,0), 0); // e1c1
+                }
+            }
+        }
+    } else if (side == BLACK && from == sq(4, 7)) { // e8
+        if (!is_in_check(BLACK)) {
+            // Kingside: e8 -> g8, rook h8 -> f8
+            if (castling_rights & 4) {
+                if (board[sq(7,7)] == BR &&
+                    board[sq(5,7)] == EMPTY &&
+                    board[sq(6,7)] == EMPTY &&
+                    !is_square_attacked(sq(5,7), enemy) &&
+                    !is_square_attacked(sq(6,7), enemy)) {
+                    add_move(list, from, sq(6,7), 0); // e8g8
+                }
+            }
+            // Queenside: e8 -> c8, rook a8 -> d8
+            if (castling_rights & 8) {
+                if (board[sq(0,7)] == BR &&
+                    board[sq(3,7)] == EMPTY &&
+                    board[sq(2,7)] == EMPTY &&
+                    board[sq(1,7)] == EMPTY &&
+                    !is_square_attacked(sq(3,7), enemy) &&
+                    !is_square_attacked(sq(2,7), enemy)) {
+                    add_move(list, from, sq(2,7), 0); // e8c8
+                }
+            }
+        }
     }
 }
 
@@ -426,7 +484,7 @@ void gen_legal_moves(MoveList& legal) {
         bool illegal = is_in_check(movingSide);
         undo_move();
 
-        if (!illegal) add_move(legal, m.from, m.to, m.promo);
+        if (!illegal) legal.moves[legal.count++] = m;
     }
 }
 
@@ -491,8 +549,30 @@ bool make_move(const Move& m) {
     u.captured = board[to];
     u.promo = m.promo;
     u.prev_side = side_to_move;
+    u.prev_castling = castling_rights;
 
-    // Apply
+    // Handle castling case first - move just the rook first:
+    if (piece == WK && from == sq(4,0)) {
+        if (to == sq(6,0)) { // Kingside
+            board[sq(5,0)] = WR;
+            board[sq(7,0)] = EMPTY;
+        } else if (to == sq(2,0)) { // Queenside
+            board[sq(3,0)] = WR;
+            board[sq(0,0)] = EMPTY;
+        }
+    }
+    // For black
+    if (piece == BK && from == sq(4,7)) {
+        if (to == sq(6,7)) {
+            board[sq(5,7)] = BR;
+            board[sq(7,7)] = EMPTY;
+        } else if (to == sq(2,7)) {
+            board[sq(3,7)] = BR;
+            board[sq(0,7)] = EMPTY;
+        }
+    }
+
+    // Apply (Moves the king in the case of castling)
     board[from] = EMPTY;
     if (m.promo != 0) {
         board[to] = (int)m.promo; // Not sure if int cast needed here, take look later
@@ -501,29 +581,65 @@ bool make_move(const Move& m) {
     }
 
     side_to_move = (side_to_move == WHITE ? BLACK : WHITE);
-
     history.push_back(u);
+
+    // Update rights for castling if a king has moved
+    if (piece == WK) castling_rights &= ~(1 | 2);
+    if (piece == BK) castling_rights &= ~(4 | 8);
+
+    // Rook moved from its original square
+    if (piece == WR && from == sq(7,0)) castling_rights &= ~1; // h1
+    if (piece == WR && from == sq(0,0)) castling_rights &= ~2; // a1
+    if (piece == BR && from == sq(7,7)) castling_rights &= ~4; // h8
+    if (piece == BR && from == sq(0,7)) castling_rights &= ~8; // a8
+
+    // Captured rook on its original square
+    if (u.captured == WR && to == sq(7,0)) castling_rights &= ~1;
+    if (u.captured == WR && to == sq(0,0)) castling_rights &= ~2;
+    if (u.captured == BR && to == sq(7,7)) castling_rights &= ~4;
+    if (u.captured == BR && to == sq(0,7)) castling_rights &= ~8;
     return true;
 }
 
 // Undoes make_move from above by popping back of history vector:
 bool undo_move() {
-    if (history.empty()) return false; // Nothing to pop
+    if (history.empty()) return false;
 
     Undo u = history.back();
     history.pop_back();
 
-    // Restore side first (important for promotion undo)
+    // Restore side + castling rights first
     side_to_move = u.prev_side;
-    // Restore destination
-    board[u.to] = u.captured;
+    castling_rights = u.prev_castling;
 
-    // Restore source
+    // If this move was castling, undo rook as well:
+    if ((u.moved == WK || u.moved == BK) && std::abs((int)u.to - (int)u.from) == 2) {
+        if (u.moved == WK) {
+            if (u.to == sq(6,0)) {          // e1g1
+                board[sq(7,0)] = WR;        // rook back to h1
+                board[sq(5,0)] = EMPTY;     // clear f1
+            } else {                         // e1c1
+                board[sq(0,0)] = WR;        // rook back to a1
+                board[sq(3,0)] = EMPTY;     // clear d1
+            }
+        } else { // BK
+            if (u.to == sq(6,7)) {          // e8g8
+                board[sq(7,7)] = BR;
+                board[sq(5,7)] = EMPTY;
+            } else {                         // e8c8
+                board[sq(0,7)] = BR;
+                board[sq(3,7)] = EMPTY;
+            }
+        }
+    }
+
+    // Restore destination square
+    board[u.to] = u.captured;
+    // Restore source square
     if (u.promo != 0) {
-        // If a promotion happened, the piece that moved was a pawn of inactive player:
         board[u.from] = (side_to_move == WHITE) ? WP : BP;
     } else {
-        board[u.from] = u.moved; // Restore position
+        board[u.from] = u.moved;
     }
     return true;
 }
@@ -538,6 +654,7 @@ bool set_fen(const char* fen) {
     // Clear the board and history
     for (int i = 0; i < 64; ++i) board[i] = EMPTY;
     clear_history();
+    castling_rights = 0;
 
     int file = 0;
     int rank = 7; // FEN starts at rank 8, for this code it is 0-7 inclusive
@@ -584,6 +701,24 @@ bool set_fen(const char* fen) {
     else if (*p == 'b') side_to_move = BLACK;
     else return false;
 
+    p++;
+    if (*p != ' ') return false; // Should be space before castling rights
+    p++;
+
+    if (*p == '-') { // No castling rights for either side
+        p++;
+    } else {
+        while (*p && *p != ' ') {
+            switch (*p) {
+                case 'K': castling_rights |= 1; break;
+                case 'Q': castling_rights |= 2; break;
+                case 'k': castling_rights |= 4; break;
+                case 'q': castling_rights |= 8; break;
+                default: return false; // Invalid
+            }
+            p++;
+        }
+    }
     return true;
 }
 

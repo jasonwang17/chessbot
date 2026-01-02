@@ -23,8 +23,9 @@ struct Undo {
     uint8_t to = 0;
     int moved = EMPTY;
     int captured = EMPTY;
-    uint8_t promo = 0; // same encoding as Move
+    uint8_t promo = 0; // Same encoding as Move
     int prev_side = WHITE;
+    int prev_castling = 0; // Added to undo castling
 };
 
 // Lifecycle
