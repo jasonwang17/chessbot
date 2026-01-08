@@ -12,7 +12,8 @@ int side_to_move = WHITE;
 
 // Bitmask: KQkq (white kingside, queenside, then black kingside, queenside)
 static int castling_rights = 0;
-
+// En passant tracker
+static int ep_square = -1;
 // From what I've seen a vector technically (?) be better than stack or deque here:
 static std::vector<Undo> history;
 
@@ -228,7 +229,7 @@ static void gen_pawn_moves(int from, MoveList& list, int side) {
     if (side == WHITE) {
         int oneUp = from + 8; // Look one above
         if (oneUp < 64 && board[oneUp] == EMPTY) {
-            // Pawn can promote if on rank 7 and rank 8 above it is empty
+            // Pawn can promote if on rank 7 and the rank 8 slot above it is empty
             if (r == 6) {
                 add_move(list, from, oneUp, WQ);
                 add_move(list, from, oneUp, WR);
@@ -260,6 +261,9 @@ static void gen_pawn_moves(int from, MoveList& list, int side) {
                     add_move(list, from, cap, 0);
                 }
             }
+            else if (cap == ep_square){
+                add_move(list, from, cap, 0);
+            }
         }
         if (f < 7) { // If we can look to the right
             int cap = from + 9; // Look above and to the right
@@ -272,6 +276,9 @@ static void gen_pawn_moves(int from, MoveList& list, int side) {
                 } else { // Just the capture move
                     add_move(list, from, cap, 0);
                 }
+            }
+            else if (cap == ep_square) {
+                add_move(list, from, cap, 0);
             }
         }
     } else { // Black pieces (same logic as white, minus instead of plus for indexing).
@@ -306,6 +313,9 @@ static void gen_pawn_moves(int from, MoveList& list, int side) {
                     add_move(list, from, cap, 0);
                 }
             }
+            else if (cap == ep_square) {
+                add_move(list, from, cap, 0);
+            }
         }
         if (f < 7) {
             int cap = from - 7;
@@ -318,6 +328,9 @@ static void gen_pawn_moves(int from, MoveList& list, int side) {
                 } else {
                     add_move(list, from, cap, 0);
                 }
+            }
+            else if (cap == ep_square) {
+                add_move(list, from, cap, 0);
             }
         }
     }
@@ -537,7 +550,7 @@ bool parse_uci_move(const std::string& s, Move& out) {
 // Updated make_move that uses Undo struct and pushes back onto history stack
 bool make_move(const Move& m) {
     int from = m.from;
-    int to   = m.to;
+    int to = m.to;
     if (from < 0 || from >= 64 || to < 0 || to >= 64) return false; // Not a valid square
 
     int piece = board[from];
@@ -550,6 +563,8 @@ bool make_move(const Move& m) {
     u.promo = m.promo;
     u.prev_side = side_to_move;
     u.prev_castling = castling_rights;
+    u.prev_ep = ep_square;
+    u.was_ep = false;
 
     // Handle castling case first - move just the rook first:
     if (piece == WK && from == sq(4,0)) {
@@ -583,6 +598,21 @@ bool make_move(const Move& m) {
     side_to_move = (side_to_move == WHITE ? BLACK : WHITE);
     history.push_back(u);
 
+    ep_square = -1; // Previous calls will have set this var, clear it:
+
+    if ((u.moved == WP || u.moved == BP) && u.captured == EMPTY && to == u.prev_ep && file_of(from) != file_of(to)){
+            // Clear the square below or above the square our pawn just moved to
+            int cap_sq = (u.moved == WP) ? to - 8 : to + 8;
+            board[cap_sq] = EMPTY;
+            history.back().was_ep = true;
+    }
+
+    // Pawn double push allows en passant:
+    if (u.moved == WP && m.to - m.from == 16)
+        ep_square = m.from + 8;
+    else if (u.moved == BP && m.from - m.to == 16)
+        ep_square = m.from - 8;
+
     // Update rights for castling if a king has moved
     if (piece == WK) castling_rights &= ~(1 | 2);
     if (piece == BK) castling_rights &= ~(4 | 8);
@@ -612,6 +642,9 @@ bool undo_move() {
     side_to_move = u.prev_side;
     castling_rights = u.prev_castling;
 
+    // Restore en passant state
+    ep_square = u.prev_ep;
+
     // If this move was castling, undo rook as well:
     if ((u.moved == WK || u.moved == BK) && std::abs((int)u.to - (int)u.from) == 2) {
         if (u.moved == WK) {
@@ -635,26 +668,34 @@ bool undo_move() {
 
     // Restore destination square
     board[u.to] = u.captured;
-    // Restore source square
+
+    // Restore source square (ep square has captured as empty)
     if (u.promo != 0) {
         board[u.from] = (side_to_move == WHITE) ? WP : BP;
     } else {
         board[u.from] = u.moved;
     }
+
+    // Restore EP-captured pawn (third square)
+    if (u.was_ep) {
+        int cap_sq = (side_to_move == WHITE) ? (u.to - 8) : (u.to + 8);
+        board[cap_sq] = (side_to_move == WHITE) ? BP : WP;
+    }
+
     return true;
 }
 
+// Does nothing for now I forgot to say lmao
 void init() {}
 
 // This shouldn't be parsing any incomplete FEN (throws false if so?)
 bool set_fen(const char* fen) {
-    // For now: parse piece placement + side to move only.
-    // Format: "<pieces> <side> ..." (we ignore castling/ep/halfmove/fullmove for now)
 
     // Clear the board and history
     for (int i = 0; i < 64; ++i) board[i] = EMPTY;
     clear_history();
     castling_rights = 0;
+    ep_square = -1;
 
     int file = 0;
     int rank = 7; // FEN starts at rank 8, for this code it is 0-7 inclusive
@@ -718,6 +759,18 @@ bool set_fen(const char* fen) {
             }
             p++;
         }
+    }
+    if (*p != ' ') return false;
+    p++; // Move to ep field
+
+    if (*p == '-') { // No ep square
+        ep_square = -1;
+        p++;
+    } else {
+        if (!p[0] || !p[1]) return false;
+        if (parse_square(p[0], p[1]) < 0) return false;
+        ep_square = parse_square(p[0], p[1]);
+        p += 2;
     }
     return true;
 }

@@ -26,6 +26,8 @@ struct Undo {
     uint8_t promo = 0; // Same encoding as Move
     int prev_side = WHITE;
     int prev_castling = 0; // Added to undo castling
+    int prev_ep = -1;
+    bool was_ep = false; // True when prev. is en passant
 };
 
 // Lifecycle
