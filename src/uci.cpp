@@ -3,6 +3,9 @@
 #include <sstream>
 #include <string>
 
+uint64_t perft(int depth);
+void perft_divide(int depth);
+
 static void dump_board() {
     // This prints backwards from the actual storage but is most intuitively displayed this way.
     for (int r = 7; r >= 0; --r) {
@@ -48,9 +51,8 @@ static void handle_position(const std::string& line) {
     if (hasMoves) {
         while (iss >> tok) {
             Move m; // Create Move struct and validate move
-            // TODO: Validate piece moveset later
             if (!parse_uci_move(tok, m)) return;
-            if (!make_move(m)) return; // TODO: Should become the newer ver. later
+            if (!make_move(m)) return;
         }
     }
 }
@@ -79,6 +81,10 @@ void uci_loop() {
             MoveList list;
             gen_legal_moves(list);
             std::cerr << "moves: " << list.count << "\n";
+        } else if (cmd == "perft") { // Debug
+            int depth; iss >> depth;
+            uint64_t nodes = perft(depth);
+            std::cout << "nodes " << nodes << std::endl;
         } else if (cmd == "go") {
             std::cout << "bestmove e2e4\n";
         } else if (cmd == "quit") {

@@ -8,6 +8,7 @@ add_executable(chessbot
         src/main.cpp
         src/board.cpp
         src/uci.cpp
+        src/perft.cpp
 )
 
 target_include_directories(chessbot PRIVATE include)
